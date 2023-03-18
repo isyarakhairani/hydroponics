@@ -1,5 +1,5 @@
-#ifndef IR_BLASTER_CONTEXT_H
-#define IR_BLASTER_CONTEXT_H
+#ifndef HYDROPONICS_CONTEXT_H
+#define HYDROPONICS_CONTEXT_H
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -53,4 +53,4 @@ esp_err_t context_set_time_updated(context_t *context);
 
 esp_err_t context_set_iot_connected(context_t *context, bool connected);
 
-#endif // IR_BLASTER_CONTEXT_H
+#endif // HYDROPONICS_CONTEXT_H

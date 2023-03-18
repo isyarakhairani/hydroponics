@@ -1,5 +1,5 @@
-#ifndef IR_BLASTER_SMARTCONFIG_H
-#define IR_BLASTER_SMARTCONFIG_H
+#ifndef HYDROPONICS_SMARTCONFIG_H
+#define HYDROPONICS_SMARTCONFIG_H
 
 #include "esp_err.h"
 
@@ -7,4 +7,4 @@
 
 esp_err_t smartconfig_init(context_t *context);
 
-#endif // IR_BLASTER_SMARTCONFIG_H
+#endif // HYDROPONICS_SMARTCONFIG_H

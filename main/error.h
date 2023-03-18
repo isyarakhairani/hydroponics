@@ -1,5 +1,5 @@
-#ifndef IR_BLASTER_ERROR_H
-#define IR_BLASTER_ERROR_H
+#ifndef HYDROPONICS_ERROR_H
+#define HYDROPONICS_ERROR_H
 
 #include <sys/cdefs.h>
 
@@ -27,4 +27,4 @@
 
 void arg_loge(const char *tag, const char *fmt, ...) __printflike(2, 3);
 
-#endif // IR_BLASTER_ERROR_H
+#endif // HYDROPONICS_ERROR_H
