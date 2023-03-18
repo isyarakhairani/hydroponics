@@ -14,6 +14,14 @@
         }                     \
     } while (0)
 
+#define context_set_single(c, p, v, f)                 \
+    do {                                               \
+        if ((p) != (v)) {                              \
+            (p) = (v);                                 \
+            xEventGroupSetBits((c)->event_group, (f)); \
+        }                                              \
+    } while (0)
+
 #define context_set_flags(c, v, f)                       \
     do {                                                 \
         if (v) {                                         \
@@ -36,6 +44,9 @@ context_t *context_create(void)
     context->sensors.temp = CONTEXT_UNKNOWN_VALUE;
     context->sensors.humidity = CONTEXT_UNKNOWN_VALUE;
 
+    context->sensors.ph.target_min = 5.5;
+    context->sensors.ph.target_max = 7.0;
+
     return context;
 }
 
@@ -47,6 +58,20 @@ inline void context_lock(context_t *context)
 inline void context_unlock(context_t *context)
 {
     portEXIT_CRITICAL(&context->spinlock);
+}
+
+esp_err_t context_set_tds(context_t *context, float value)
+{
+    ARG_CHECK(context != NULL, ERR_PARAM_NULL);
+    context_set_single(context, context->sensors.tds.value, value, CONTEXT_EVENT_TDS);
+    return ESP_OK;
+}
+
+esp_err_t context_set_ph(context_t *context, float value)
+{
+    ARG_CHECK(context != NULL, ERR_PARAM_NULL);
+    context_set_single(context, context->sensors.ph.value, value, CONTEXT_EVENT_PH);
+    return ESP_OK;
 }
 
 esp_err_t context_set_temp_humidity(context_t *context, float temp, float humidity)
