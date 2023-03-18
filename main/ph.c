@@ -80,10 +80,12 @@ static void ph_task(void *arg)
     context_t *context = (context_t *)arg;
 
     while (true) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
         uint32_t voltage = ph_read_voltage();
         float value = ph_get_value(voltage);
         context_set_ph(context, value);
-        ESP_LOGI(TAG, "value: %.1f", value);
+        ESP_LOGI(TAG, "value: %.2f", value);
 
         if (ph_pump_ready) {
             if (value < context->sensors.ph.target_min) {
@@ -94,7 +96,7 @@ static void ph_task(void *arg)
                 pump_gpio = PH_DOWN_GPIO;
             } else {
                 ESP_LOGI(TAG, "pH is normal.");
-                return;
+                continue;
             }
             gpio_set_level(pump_gpio, 1);
             ESP_ERROR_CHECK(esp_timer_start_once(ph_pump_timer, PH_PUMP_TIMER * 1000000));
@@ -104,7 +106,6 @@ static void ph_task(void *arg)
         } else {
             ESP_LOGI(TAG, "pH pump is not available.");
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
