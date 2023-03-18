@@ -45,7 +45,7 @@ static void tds_config_pins()
 {
     esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_DEFAULT, DEFAULT_VREF, &adc1_chars);
     ESP_ERROR_CHECK(adc1_config_width(ADC_WIDTH_BIT_DEFAULT));
-    ESP_ERROR_CHECK(adc1_config_channel_atten(PH_ANALOG_GPIO, ADC_ATTEN_DB_11));
+    ESP_ERROR_CHECK(adc1_config_channel_atten(TDS_ANALOG_GPIO, ADC_ATTEN_DB_11));
 }
 
 static float tds_read()
@@ -57,7 +57,7 @@ static float tds_read()
     for (int i = 0; i < TDS_NUM_SAMPLES; i++) {
         // Read analogue value
         int analogSample = adc1_get_raw(TDS_ANALOG_GPIO);
-        ESP_LOGI(TDS, "Read analog value %d then sleep for %f milli seconds.", analogSample, TDS_SAMPLE_DELAY);
+        ESP_LOGI(TDS, "Read analog value %d then sleep for %d milli seconds.", analogSample, TDS_SAMPLE_DELAY);
         runningSampleValue = runningSampleValue + analogSample;
         vTaskDelay(TDS_SAMPLE_DELAY / portTICK_PERIOD_MS);
     }
