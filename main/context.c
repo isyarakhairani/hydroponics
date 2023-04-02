@@ -120,3 +120,10 @@ esp_err_t context_set_iot_connected(context_t *context, bool connected)
     context_set_flags(context, connected, CONTEXT_EVENT_IOT);
     return ESP_OK;
 }
+
+esp_err_t context_set_cycle(context_t *context, int64_t start_time)
+{
+    ARG_CHECK(context != NULL, ERR_PARAM_NULL);
+    context_set_single(context, context->cycle.start_time, start_time, CONTEXT_EVENT_CYCLE);
+    return ESP_OK;
+}

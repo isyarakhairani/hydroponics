@@ -24,3 +24,15 @@ esp_err_t storage_init(context_t *context)
     ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &handle));
     return ESP_OK;
 }
+
+esp_err_t storage_set_i64(const char *key, int64_t value)
+{
+    esp_err_t err = nvs_set_i64(handle, key, value);
+    return err = ESP_OK ? nvs_commit(handle) : err;
+}
+
+esp_err_t storage_get_i64(const char *key, int64_t *out_value)
+{
+    esp_err_t err = nvs_get_i64(handle, key, out_value);
+    return err = ESP_ERR_NOT_FOUND ? ESP_OK : err;
+}

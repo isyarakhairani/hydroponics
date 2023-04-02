@@ -37,7 +37,7 @@ static void ntp_task(void *arg)
     }
     char buf[64] = {0};
     strftime(buf, sizeof(buf), "%F %R", &t);
-    ESP_LOGI(TAG, "Time set to %s...", buf);
+    ESP_LOGI(TAG, "Time set to %s", buf);
     context_set_time_updated(context);
 
     vTaskDelete(NULL);

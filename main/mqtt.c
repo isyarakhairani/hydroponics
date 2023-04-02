@@ -15,6 +15,7 @@
 #include "context.h"
 #include "error.h"
 #include "mqtt.h"
+#include "storage.h"
 
 #define DEVICE_PATH "projects/%s/locations/%s/registries/%s/devices/%s"
 #define SUBSCRIBE_TOPIC_WILDCARD_COMMAND "/devices/%s/commands/#"
@@ -72,6 +73,9 @@ static void mqtt_create_jwt_token(void)
 
 static esp_err_t mqtt_handle_command(const uint8_t *command)
 {
+    int64_t start_time = (int64_t)time(NULL);
+    ESP_ERROR_CHECK(context_set_cycle(context, start_time));
+    ESP_ERROR_CHECK(storage_set_i64("cycle_start_tm", start_time));
     return ESP_OK;
 }
 
@@ -123,7 +127,7 @@ static void mqtt_publish_telemetry_event(iotc_context_handle_t context_handle, i
     ARG_UNUSED(timed_task);
     ARG_UNUSED(user_data);
 
-    ESP_LOGI(TAG, "Publishing telemetry event...");
+    // ESP_LOGI(TAG, "Publishing telemetry event...");
 }
 
 static void mqtt_connection_state_changed(iotc_context_handle_t in_context_handle, void *data, iotc_state_t state)

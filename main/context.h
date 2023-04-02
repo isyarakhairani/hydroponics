@@ -1,6 +1,8 @@
 #ifndef HYDROPONICS_CONTEXT_H
 #define HYDROPONICS_CONTEXT_H
 
+#include <time.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/portmacro.h"
@@ -27,6 +29,7 @@ typedef enum {
     CONTEXT_EVENT_PUMP_MAIN = BIT13,
     CONTEXT_EVENT_TANK = BIT14,
     CONTEXT_EVENT_TANK_VALVE = BIT15,
+    CONTEXT_EVENT_CYCLE = BIT16,
 } context_event_t;
 
 typedef struct {
@@ -37,6 +40,11 @@ typedef struct {
         uint8_t ssid[32];
         uint8_t password[64];
     } config;
+
+    struct {
+        int64_t start_time;
+        int elapsed_days;
+    } cycle;
 
     struct {
         volatile float temp;
@@ -80,5 +88,7 @@ esp_err_t context_set_network_error(context_t *context, bool error);
 esp_err_t context_set_time_updated(context_t *context);
 
 esp_err_t context_set_iot_connected(context_t *context, bool connected);
+
+esp_err_t context_set_cycle(context_t *context, int64_t start_time);
 
 #endif // HYDROPONICS_CONTEXT_H
