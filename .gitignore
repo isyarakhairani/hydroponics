@@ -1,5 +1,13 @@
+# VS Code settings
 .vscode/
-build/
+hydroponics.code-workspace
+
+# Project files
 certs/
 
+# Project config
+sdkconfig
 sdkconfig.old
+
+# ESP-IDF build directory
+build/
