@@ -77,6 +77,8 @@ esp_err_t context_set_tds(context_t *context, float value);
 
 esp_err_t context_set_ph(context_t *context, float value);
 
+esp_err_t context_set_tank(context_t *context, float value);
+
 esp_err_t context_set_temp_humidity(context_t *context, float temp, float humidity);
 
 esp_err_t context_set_wifi_provisioned(context_t *context);

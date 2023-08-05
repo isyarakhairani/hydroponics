@@ -14,6 +14,7 @@
 #include "esp_timer.h"
 
 #include "context.h"
+#include "mqtt.h"
 #include "tds.h"
 
 #define DEFAULT_VREF 1100
@@ -27,49 +28,49 @@
 
 #define TDS_ANALOG_GPIO ADC1_CHANNEL_7 // PIN 35 ; ADC1 is availalbe on pins 15, 34, 35 & 36
 
-// #define PH_LOW 5.5
-// #define PH_HIGH 7.0
-// #define TDS_PUMP_TIMER 5   // seconds
-// #define TDS_DELAY_TIMER 10 // seconds
+#define TDS_A_PUMP_GPIO 16
+#define TDS_B_PUMP_GPIO 17
+#define PUMP_GPIO_MASK ((1ULL << TDS_A_PUMP_GPIO) | (1ULL << TDS_B_PUMP_GPIO))
 
-#define TDS_A_GPIO 16
-#define TDS_B_GPIO 17
-
-static const char *TDS = "TDS INFO";
-static esp_timer_handle_t ph_pump_timer;
-static esp_timer_handle_t ph_delay_timer;
+static const char *TAG = "tds";
 
 static esp_adc_cal_characteristics_t adc1_chars;
 
-static void tds_config_pins()
+static esp_timer_handle_t tds_pump_duration_timer;
+static esp_timer_handle_t tds_pump_delay_timer;
+
+static bool is_pump_ready = true;
+
+static void tds_config_pin()
 {
     esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_DEFAULT, DEFAULT_VREF, &adc1_chars);
     ESP_ERROR_CHECK(adc1_config_width(ADC_WIDTH_BIT_DEFAULT));
     ESP_ERROR_CHECK(adc1_config_channel_atten(TDS_ANALOG_GPIO, ADC_ATTEN_DB_11));
+
+    gpio_config_t config = {
+        .intr_type = GPIO_INTR_DISABLE,
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = PUMP_GPIO_MASK,
+        .pull_up_en = 1,
+    };
+    gpio_config(&config);
 }
 
 static float tds_read()
 {
-    // Take n sensor readings every p millseconds where n is TDS_NUM_SAMPLES, and p is TDS_SAMPLE_DELAY.
-    // Return the average sample value.
     uint32_t runningSampleValue = 0;
-
     for (int i = 0; i < TDS_NUM_SAMPLES; i++) {
-        // Read analogue value
         int analogSample = adc1_get_raw(TDS_ANALOG_GPIO);
-        ESP_LOGI(TDS, "Read analog value %d then sleep for %d milli seconds.", analogSample, TDS_SAMPLE_DELAY);
         runningSampleValue = runningSampleValue + analogSample;
-        vTaskDelay(TDS_SAMPLE_DELAY / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 
     float tdsAverage = runningSampleValue / TDS_NUM_SAMPLES;
-    ESP_LOGI(TDS, "Calculated average = %f", tdsAverage);
     return tdsAverage;
 }
 
 static float tds_convert_to_ppm(float analogReading)
 {
-    ESP_LOGI(TDS, "Converting an analog value to a TDS PPM value.");
     float adcCompensation = 1 + (1 / 3.9);                                                                                                                                                 // 1/3.9 (11dB) attenuation.
     float vPerDiv = (TDS_VREF / 4096) * adcCompensation;                                                                                                                                   // Calculate the volts per division using the VREF taking account of the chosen attenuation value.
     float averageVoltage = analogReading * vPerDiv;                                                                                                                                        // Convert the ADC reading into volts
@@ -77,34 +78,80 @@ static float tds_convert_to_ppm(float analogReading)
     float compensationVolatge = averageVoltage / compensationCoefficient;                                                                                                                  // temperature compensation
     float tdsValue = (133.42 * compensationVolatge * compensationVolatge * compensationVolatge - 255.86 * compensationVolatge * compensationVolatge + 857.39 * compensationVolatge) * 0.5; // convert voltage value to tds value
 
-    ESP_LOGI(TDS, "Volts per division = %f", vPerDiv);
-    ESP_LOGI(TDS, "Average Voltage = %f", averageVoltage);
-    ESP_LOGI(TDS, "Temperature (currently fixed, we should measure this) = %f", TDS_TEMPERATURE);
-    ESP_LOGI(TDS, "Compensation Coefficient = %f", compensationCoefficient);
-    ESP_LOGI(TDS, "Compensation Voltge = %f", compensationVolatge);
-    ESP_LOGI(TDS, "tdsValue = %f ppm", tdsValue);
+    // ESP_LOGI(TAG, "Volts per division = %f", vPerDiv);
+    // ESP_LOGI(TAG, "Average Voltage = %f", averageVoltage);
+    // ESP_LOGI(TAG, "Temperature (currently fixed, we should measure this) = %f", TDS_TEMPERATURE);
+    // ESP_LOGI(TAG, "Compensation Coefficient = %f", compensationCoefficient);
+    // ESP_LOGI(TAG, "Compensation Voltge = %f", compensationVolatge);
+    // ESP_LOGI(TAG, "tdsValue = %f ppm", tdsValue);
     return tdsValue;
 }
 
-static void tds_task(void *pvParameters)
+static void tds_task(void *arg)
 {
+    context_t *context = (context_t *)arg;
+
+    /* Waiting for tank level measurement */
+    xEventGroupWaitBits(context->event_group, CONTEXT_EVENT_TANK, pdFALSE, pdTRUE, portMAX_DELAY);
+
     while (true) {
         float sensorReading = tds_read();
         float tdsResult = tds_convert_to_ppm(sensorReading);
-        printf("TDS Reading = %f ppm\n", tdsResult);
-        vTaskDelay(((1000 / portTICK_PERIOD_MS) * 60) * 1); // delay in minutes between measurements
+        ESP_ERROR_CHECK(context_set_tds(context, tdsResult));
+        ESP_LOGI(TAG, "value: %.02f ppm", tdsResult);
+
+        if (context->sensors.tank.value >= context->sensors.tank.target_min &&
+            context->sensors.tank.value <= context->sensors.tank.target_max) {
+            if (tdsResult < context->sensors.tds.target_min) {
+                if (is_pump_ready) {
+                    ESP_LOGW(TAG, "TDS < %.02f, starting TDS A and B pump...", context->sensors.tds.target_min);
+                    gpio_set_level(TDS_A_PUMP_GPIO, 1);
+                    gpio_set_level(TDS_B_PUMP_GPIO, 1);
+                    ESP_ERROR_CHECK(esp_timer_start_once(tds_pump_duration_timer, 1000000 * 5));
+                    ESP_ERROR_CHECK(esp_timer_start_once(tds_pump_delay_timer, 1000000 * 15));
+                    mqtt_publish_state("PUMP_TDS_A_B");
+                    is_pump_ready = false;
+                }
+            }
+        } else {
+            ESP_LOGI(TAG, "Waiting for tank level to be set");
+        }
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
+}
+
+static void tds_pump_duration_cb(void *arg)
+{
+    gpio_set_level(TDS_A_PUMP_GPIO, 0);
+    gpio_set_level(TDS_B_PUMP_GPIO, 0);
+    ESP_LOGI(TAG, "pump stop");
+}
+
+static void tds_pump_delay_cb(void *arg)
+{
+    is_pump_ready = true;
+    ESP_LOGI(TAG, "pump ready");
+}
+
+static void tds_init_timer(void)
+{
+    const esp_timer_create_args_t duration_timer_args = {
+        .callback = &tds_pump_duration_cb,
+        .name = "tds_pump_duration_timer",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&duration_timer_args, &tds_pump_duration_timer));
+
+    const esp_timer_create_args_t delay_timer_args = {
+        .callback = &tds_pump_delay_cb,
+        .name = "tds_pump_delay_timer",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&delay_timer_args, &tds_pump_delay_timer));
 }
 
 esp_err_t tds_init(context_t *context)
 {
-    // Init timer
-    // tds_timer_init();
-
-    // Init gpio
-    // tds_pump_init();
-
-    // Start task
+    tds_config_pin();
+    tds_init_timer();
     xTaskCreatePinnedToCore(tds_task, "tds", 4096, context, 5, NULL, tskNO_AFFINITY);
     return ESP_OK;
 }

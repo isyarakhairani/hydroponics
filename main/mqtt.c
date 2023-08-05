@@ -25,6 +25,14 @@
 #define PUBLISH_TOPIC_STATE "/devices/%s/state"
 #define TASK_REPEAT_FOREVER 1
 
+#define EVENT_DATA "{"                       \
+                   "\"tdsValue\": %.02f,"    \
+                   "\"phValue\": %.02f,"     \
+                   "\"temperature\": %.01f," \
+                   "\"humidity\": %.01f,"    \
+                   "\"tankLevel\": %.02f"    \
+                   "}"
+
 static const char *TAG = "mqtt";
 
 static context_t *context;
@@ -76,6 +84,7 @@ static esp_err_t mqtt_handle_command(const uint8_t *command)
     int64_t start_time = (int64_t)time(NULL);
     ESP_ERROR_CHECK(context_set_cycle(context, start_time));
     ESP_ERROR_CHECK(storage_set_i64("cycle_start_tm", start_time));
+
     return ESP_OK;
 }
 
@@ -123,11 +132,30 @@ static void mqtt_subscribe_callback(iotc_context_handle_t in_context_handle, iot
 static void mqtt_publish_telemetry_event(iotc_context_handle_t context_handle, iotc_timed_task_handle_t timed_task,
                                          void *user_data)
 {
-    ARG_UNUSED(context_handle);
     ARG_UNUSED(timed_task);
     ARG_UNUSED(user_data);
 
-    // ESP_LOGI(TAG, "Publishing telemetry event...");
+    char *msg = NULL;
+    asprintf(&msg, EVENT_DATA,
+             context->sensors.tds.value,
+             context->sensors.ph.value,
+             context->sensors.temp,
+             context->sensors.humidity,
+             context->sensors.tank.value);
+    ESP_LOGI(TAG, "Publishing msg \"%s\" to topic \"%s\"", msg, publish_topic_event);
+    iotc_publish(context_handle, publish_topic_event, msg, mqtt_qos, NULL, NULL);
+
+    free(msg);
+}
+
+esp_err_t mqtt_publish_state(const char *msg)
+{
+    if (iotc_is_context_connected(iotc_context) == 0) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    ESP_LOGI(TAG, "Publishing msg \"%s\" to topic \"%s\"", msg, publish_topic_state);
+    iotc_publish(iotc_context, publish_topic_state, msg, mqtt_qos, NULL, NULL);
+    return ESP_OK;
 }
 
 static void mqtt_connection_state_changed(iotc_context_handle_t in_context_handle, void *data, iotc_state_t state)

@@ -5,6 +5,8 @@
 
 #include "context.h"
 
+esp_err_t mqtt_publish_state(const char *msg);
+
 esp_err_t mqtt_init(context_t *context);
 
 #endif // HYDROPONICS_MQTT_H

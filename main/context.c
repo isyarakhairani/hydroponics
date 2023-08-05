@@ -46,6 +46,8 @@ context_t *context_create(void)
 
     context->sensors.ph.target_min = 5.5;
     context->sensors.ph.target_max = 7.0;
+    context->sensors.tank.target_min = 20.0;
+    context->sensors.tank.target_max = 24.0;
 
     return context;
 }
@@ -74,12 +76,19 @@ esp_err_t context_set_ph(context_t *context, float value)
     return ESP_OK;
 }
 
+esp_err_t context_set_tank(context_t *context, float value)
+{
+    ARG_CHECK(context != NULL, ERR_PARAM_NULL);
+    context_set_single(context, context->sensors.tank.value, value, CONTEXT_EVENT_TANK);
+    return ESP_OK;
+}
+
 esp_err_t context_set_temp_humidity(context_t *context, float temp, float humidity)
 {
     EventBits_t bitsToSet = 0U;
     context_lock(context);
     context_set(context->sensors.temp, temp, CONTEXT_EVENT_TEMPERATURE);
-    context_set(context->sensors.temp, temp, CONTEXT_EVENT_HUMIDITY);
+    context_set(context->sensors.humidity, humidity, CONTEXT_EVENT_HUMIDITY);
     context_unlock(context);
 
     if (bitsToSet) xEventGroupSetBits(context->event_group, bitsToSet);

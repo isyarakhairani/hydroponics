@@ -11,6 +11,8 @@
 #include "error.h"
 #include "storage.h"
 
+#define GROW_LIGHT_GPIO 21
+
 static const char *TAG = "cycle";
 
 static void cycle_task(void *arg)
@@ -22,6 +24,14 @@ static void cycle_task(void *arg)
     xEventGroupWaitBits(context->event_group, CONTEXT_EVENT_TIME | CONTEXT_EVENT_CYCLE,
                         pdFALSE, pdTRUE, portMAX_DELAY);
 
+    gpio_config_t config = {
+        .intr_type = GPIO_INTR_DISABLE,
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = GROW_LIGHT_GPIO,
+        .pull_up_en = 1,
+    };
+    gpio_config(&config);
+
     struct tm timeinfo = {0};
     char strftime_buf[64] = {0};
     localtime_r((time_t *)&context->cycle.start_time, &timeinfo);
@@ -31,6 +41,12 @@ static void cycle_task(void *arg)
     while (true) {
         time_t current_time = time(NULL);
         localtime_r(&current_time, &timeinfo);
+        ESP_LOGI(TAG, "Current time: %d:%d", timeinfo.tm_hour, timeinfo.tm_min);
+        if (timeinfo.tm_hour >= 6 && timeinfo.tm_hour <= 18) {
+            gpio_set_level(GROW_LIGHT_GPIO, 1);
+        } else {
+            gpio_set_level(GROW_LIGHT_GPIO, 0);
+        }
         double elapsed_time = difftime(current_time, (time_t)context->cycle.start_time);
         int elapsed_days = (int)(elapsed_time / (24 * 3600));
         ESP_LOGI(TAG, "Days elapsed since cycle start: %d", elapsed_days);
