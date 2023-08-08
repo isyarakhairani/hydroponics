@@ -35,14 +35,26 @@ exports.httpSendCommand = functions.region('asia-southeast2').https.onRequest(as
 exports.pubsubEventData = functions.region('asia-southeast2').pubsub.topic('event').onPublish(async (msg) => {
   functions.logger.log(Buffer.from(msg.data, 'base64').toString());
   const deviceId = msg.attributes.deviceId;
-  const docRef = db.collection('hydroponics').doc('realtime_update');
-  const res = await docRef.update({
+
+  const realtimeRef = db.collection('hydroponics').doc('realtime_update');
+  const storedRef = db.collection('stored');
+
+  const data = {
     tdsValue: msg.json.tdsValue,
     phValue: msg.json.phValue,
     temperature: msg.json.temperature,
     humidity: msg.json.humidity,
     tankLevel: msg.json.tankLevel,
     timestamp: FieldValue.serverTimestamp(),
-  });
-  functions.logger.log('Update: ', res);
+  };
+
+  const update = await realtimeRef.update(data);
+  functions.logger.log('Update: ', update);
+
+  const currentTms = Timestamp.now().toMillis();
+  const snapshot = await storedRef.where('timestamp', '>', new Date(currentTms - (60 * 60 * 1000))).get();
+  if (snapshot.empty) {
+    const add = await storedRef.add(data);
+    functions.logger.log('Add: ', add);
+  }
 });

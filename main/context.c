@@ -6,6 +6,11 @@
 #include "context.h"
 #include "error.h"
 
+#define CONTEXT_PH_MIN_VALUE 5.5
+#define CONTEXT_PH_MAX_VALUE 6.5
+#define CONTEXT_TANK_MIN_VALUE 20
+#define CONTEXT_TANK_MAX_VALUE 24
+
 #define context_set(p, v, f)  \
     do {                      \
         if ((p) != (v)) {     \
@@ -41,13 +46,22 @@ context_t *context_create(void)
     context->spinlock = spinlock;
     context->event_group = xEventGroupCreate();
 
-    context->sensors.temp = CONTEXT_UNKNOWN_VALUE;
-    context->sensors.humidity = CONTEXT_UNKNOWN_VALUE;
+    context->cycle.task_handle = NULL;
 
-    context->sensors.ph.target_min = 5.5;
-    context->sensors.ph.target_max = 7.0;
-    context->sensors.tank.target_min = 20.0;
-    context->sensors.tank.target_max = 24.0;
+    context->sensors.temp = 0;
+    context->sensors.humidity = 0;
+
+    context->sensors.tds.value = 0;
+    context->sensors.tds.target_min = 0;
+    context->sensors.tds.target_min = 0;
+
+    context->sensors.ph.value = 0;
+    context->sensors.ph.target_min = CONTEXT_PH_MIN_VALUE;
+    context->sensors.ph.target_max = CONTEXT_PH_MAX_VALUE;
+
+    context->sensors.tank.value = 0;
+    context->sensors.tank.target_min = CONTEXT_TANK_MIN_VALUE;
+    context->sensors.tank.target_max = CONTEXT_TANK_MAX_VALUE;
 
     return context;
 }
@@ -66,6 +80,14 @@ esp_err_t context_set_tds(context_t *context, float value)
 {
     ARG_CHECK(context != NULL, ERR_PARAM_NULL);
     context_set_single(context, context->sensors.tds.value, value, CONTEXT_EVENT_TDS);
+    return ESP_OK;
+}
+
+esp_err_t context_set_target_tds(context_t *context, float min, float max)
+{
+    ARG_CHECK(context != NULL, ERR_PARAM_NULL);
+    context_set_single(context, context->sensors.tds.target_min, min, CONTEXT_EVENT_TDS);
+    context_set_single(context, context->sensors.tds.target_max, max, CONTEXT_EVENT_TDS);
     return ESP_OK;
 }
 

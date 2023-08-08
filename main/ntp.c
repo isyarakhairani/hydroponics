@@ -24,7 +24,7 @@ static void ntp_task(void *arg)
     ESP_LOGI(TAG, "Set timezone to Western Indonesia Time...");
 
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    sntp_setservername(0, "id.pool.ntp.org");
+    sntp_setservername(0, "time.google.com");
     sntp_init();
 
     time_t now = 0;

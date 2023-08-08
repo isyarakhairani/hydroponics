@@ -8,6 +8,8 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "cJSON.h"
+
 #include <iotc.h>
 #include <iotc_jwt.h>
 #include <iotc_types.h>
@@ -32,6 +34,9 @@
                    "\"humidity\": %.01f,"    \
                    "\"tankLevel\": %.02f"    \
                    "}"
+
+#define COMMAND_START_CYCLE 0
+#define COMMAND_END_CYCLE 1
 
 static const char *TAG = "mqtt";
 
@@ -79,11 +84,24 @@ static void mqtt_create_jwt_token(void)
     ESP_LOGI(TAG, "Jwt Token created at %s", buf);
 }
 
-static esp_err_t mqtt_handle_command(const uint8_t *command)
+static esp_err_t mqtt_handle_command(const uint8_t *payload)
 {
+    cJSON *cmd = cJSON_Parse((const char *)payload);
+    int type = cJSON_GetObjectItem(cmd, "cmdType")->valueint;
     int64_t start_time = (int64_t)time(NULL);
-    ESP_ERROR_CHECK(context_set_cycle(context, start_time));
-    ESP_ERROR_CHECK(storage_set_i64("cycle_start_tm", start_time));
+    switch (type) {
+    case COMMAND_START_CYCLE:
+        ESP_ERROR_CHECK(context_set_cycle(context, start_time));
+        ESP_ERROR_CHECK(storage_set_i64("cycle_start_tm", start_time));
+        break;
+    case COMMAND_END_CYCLE:
+        context->sensors.tank.target_min = 0;
+        context->sensors.tank.target_max = 0;
+        vTaskDelete(context->cycle.task_handle);
+        break;
+    default:
+        ESP_LOGE(TAG, "Invalid command type: %d", type);
+    }
 
     return ESP_OK;
 }

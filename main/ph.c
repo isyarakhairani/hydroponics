@@ -15,11 +15,11 @@
 #include "ph.h"
 
 #define DEFAULT_VREF 1100  // (int) Default reference voltage
-#define PH_NUM_SAMPLES 64  // (int) Number of reading to take for an average
-#define PH_SAMPLE_DELAY 15 // (int) Sample delay in millis
+#define PH_NUM_SAMPLES 32  // (int) Number of reading to take for an average
+#define PH_SAMPLE_DELAY 50 // (int) Sample delay in millis
 
-#define PH_NEUTRAL_VOLTAGE 1500
-#define PH_ACID_VOLTAGE 2033
+#define PH_NEUTRAL_VOLTAGE 1540
+#define PH_ACID_VOLTAGE 2010
 
 #define PH_PUMP_DURATION 5 // (int) Pump on duration in second
 #define PH_PUMP_DELAY 120  // (int) Delay duration between pump dosing in second
@@ -27,7 +27,7 @@
 #define PH_UP_PUMP_GPIO 18
 #define PH_DOWN_PUMP_GPIO 19
 #define PUMP_GPIO_MASK ((1ULL << PH_UP_PUMP_GPIO) | (1ULL << PH_DOWN_PUMP_GPIO))
-#define PH_ANALOG_GPIO ADC1_CHANNEL_6 // PIN 34 ; ADC1 is availalbe on pins 15, 34, 35 & 36
+#define PH_ANALOG_GPIO ADC1_CHANNEL_6 // GPIO 34
 
 static const char *TAG = "ph";
 
@@ -55,22 +55,22 @@ static void ph_config_pin(void)
 
 uint32_t ph_read_voltage(void)
 {
-    uint32_t adc_reading = 0;
+    uint32_t running_sample = 0;
     for (int i = 0; i < PH_NUM_SAMPLES; i++) {
-        int adc_raw = adc1_get_raw(PH_ANALOG_GPIO);
-        adc_reading = adc_reading + adc_raw;
+        int adc_sample = adc1_get_raw(PH_ANALOG_GPIO);
+        running_sample = running_sample + adc_sample;
         vTaskDelay(pdMS_TO_TICKS(PH_SAMPLE_DELAY));
     }
-    adc_reading /= PH_NUM_SAMPLES;
-    uint32_t adc_voltage = esp_adc_cal_raw_to_voltage(adc_reading, &adc1_chars);
-    ESP_LOGI(TAG, "raw: %d voltage: %d", adc_reading, adc_voltage);
+    uint32_t adc_raw = running_sample / PH_NUM_SAMPLES;
+    uint32_t adc_voltage = esp_adc_cal_raw_to_voltage(adc_raw, &adc1_chars);
+    ESP_LOGI(TAG, "raw = %d, voltage = %d", adc_raw, adc_voltage);
     return adc_voltage;
 }
 
 float ph_get_value(uint32_t voltage)
 {
-    float slope = (7.0 - 4.0) / ((PH_NEUTRAL_VOLTAGE - 1500.0) / 3.0 - (PH_ACID_VOLTAGE - 1500.0) / 3.0);
-    float intercept = 7.0 - slope * (PH_NEUTRAL_VOLTAGE - 1500.0) / 3.0;
+    float slope = (6.86 - 4.0) / ((PH_NEUTRAL_VOLTAGE - 1500.0) / 3.0 - (PH_ACID_VOLTAGE - 1500.0) / 3.0);
+    float intercept = 6.86 - slope * (PH_NEUTRAL_VOLTAGE - 1500.0) / 3.0;
     float ph = slope * (voltage - 1500.0) / 3.0 + intercept;
     return ph;
 }
@@ -81,6 +81,7 @@ static void ph_task(void *arg)
 
     /* Waiting for tank level measurement */
     xEventGroupWaitBits(context->event_group, CONTEXT_EVENT_TANK, pdFALSE, pdTRUE, portMAX_DELAY);
+    vTaskDelay(pdMS_TO_TICKS(10000));
 
     while (true) {
         uint32_t voltage = ph_read_voltage();
@@ -110,7 +111,7 @@ static void ph_task(void *arg)
                 }
             }
         } else {
-            ESP_LOGI(TAG, "Waiting for tank level to be set");
+            ESP_LOGW(TAG, "Waiting for tank level to be set");
         }
         vTaskDelay(pdMS_TO_TICKS(3000));
     }

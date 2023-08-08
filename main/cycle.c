@@ -27,7 +27,7 @@ static void cycle_task(void *arg)
     gpio_config_t config = {
         .intr_type = GPIO_INTR_DISABLE,
         .mode = GPIO_MODE_OUTPUT,
-        .pin_bit_mask = GROW_LIGHT_GPIO,
+        .pin_bit_mask = (1ULL << GROW_LIGHT_GPIO),
         .pull_up_en = 1,
     };
     gpio_config(&config);
@@ -42,27 +42,23 @@ static void cycle_task(void *arg)
         time_t current_time = time(NULL);
         localtime_r(&current_time, &timeinfo);
         ESP_LOGI(TAG, "Current time: %d:%d", timeinfo.tm_hour, timeinfo.tm_min);
-        if (timeinfo.tm_hour >= 6 && timeinfo.tm_hour <= 18) {
+        if (timeinfo.tm_hour > 5 && timeinfo.tm_hour < 18) {
             gpio_set_level(GROW_LIGHT_GPIO, 1);
         } else {
             gpio_set_level(GROW_LIGHT_GPIO, 0);
         }
         double elapsed_time = difftime(current_time, (time_t)context->cycle.start_time);
         int elapsed_days = (int)(elapsed_time / (24 * 3600));
-        ESP_LOGI(TAG, "Days elapsed since cycle start: %d", elapsed_days);
+        ESP_LOGI(TAG, "Days since cycle start: %d", elapsed_days);
         context->cycle.elapsed_days = elapsed_days;
         if (elapsed_days >= 21) {
-            context->sensors.tds.target_min = 875;
-            context->sensors.tds.target_max = 925;
+            context_set_target_tds(context, 875, 925);
         } else if (elapsed_days >= 14) {
-            context->sensors.tds.target_min = 775;
-            context->sensors.tds.target_max = 825;
+            context_set_target_tds(context, 775, 825);
         } else if (elapsed_days >= 7) {
-            context->sensors.tds.target_min = 675;
-            context->sensors.tds.target_max = 725;
+            context_set_target_tds(context, 675, 725);
         } else if (elapsed_days >= 0) {
-            context->sensors.tds.target_min = 575;
-            context->sensors.tds.target_max = 625;
+            context_set_target_tds(context, 575, 625);
         }
         vTaskDelay(pdMS_TO_TICKS(10 * 60 * 1000));
     }
@@ -78,6 +74,9 @@ esp_err_t cycle_init(context_t *context)
         ESP_ERROR_CHECK(context_set_cycle(context, start_time));
     }
 
-    xTaskCreatePinnedToCore(cycle_task, "cycle", 2048, context, 2, NULL, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(cycle_task, "cycle", 2048, context, 3, &context->cycle.task_handle, tskNO_AFFINITY);
+    if (context->cycle.task_handle == NULL) {
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }

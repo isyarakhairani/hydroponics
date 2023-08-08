@@ -19,14 +19,12 @@
 
 #define DEFAULT_VREF 1100
 
-#define TDS_STABILISATION_DELAY 10                                    //(int) How long to wait (in seconds) after enabling sensor before taking a reading
-#define TDS_NUM_SAMPLES 10                                            //(int) Number of reading to take for an average
-#define TDS_SAMPLE_PERIOD 20                                          //(int) Sample period (delay between samples == sample period / number of readings)
-#define TDS_TEMPERATURE 24.0                                          //(float) Temperature of water (we should measure this with a sensor to get an accurate reading)
-#define TDS_VREF 1.18                                                 //(float) Voltage reference for ADC. We should measure the actual value of each ESP32
-#define TDS_SAMPLE_DELAY (TDS_SAMPLE_PERIOD / TDS_NUM_SAMPLES) * 1000 // seconds
+#define TDS_NUM_SAMPLES 32   // (int) Number of reading to take for an average
+#define TDS_SAMPLE_DELAY 50  // (int) Sample period (delay between samples == sample period / number of readings)
+#define TDS_TEMPERATURE 25.0 // (float) Temperature of water (we should measure this with a sensor to get an accurate reading)
+#define TDS_VREF 2.28        // (float) Voltage reference for ADC. We should measure the actual value of each ESP32
 
-#define TDS_ANALOG_GPIO ADC1_CHANNEL_7 // PIN 35 ; ADC1 is availalbe on pins 15, 34, 35 & 36
+#define TDS_ANALOG_GPIO ADC1_CHANNEL_0 // GPIO 36
 
 #define TDS_A_PUMP_GPIO 16
 #define TDS_B_PUMP_GPIO 17
@@ -62,28 +60,28 @@ static float tds_read()
     for (int i = 0; i < TDS_NUM_SAMPLES; i++) {
         int analogSample = adc1_get_raw(TDS_ANALOG_GPIO);
         runningSampleValue = runningSampleValue + analogSample;
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(TDS_SAMPLE_DELAY));
     }
 
     float tdsAverage = runningSampleValue / TDS_NUM_SAMPLES;
+    uint32_t adcVoltage = esp_adc_cal_raw_to_voltage(tdsAverage, &adc1_chars);
+    ESP_LOGI(TAG, "raw = %.f, voltage = %d", tdsAverage, adcVoltage);
     return tdsAverage;
 }
 
 static float tds_convert_to_ppm(float analogReading)
 {
-    float adcCompensation = 1 + (1 / 3.9);                                                                                                                                                 // 1/3.9 (11dB) attenuation.
-    float vPerDiv = (TDS_VREF / 4096) * adcCompensation;                                                                                                                                   // Calculate the volts per division using the VREF taking account of the chosen attenuation value.
-    float averageVoltage = analogReading * vPerDiv;                                                                                                                                        // Convert the ADC reading into volts
-    float compensationCoefficient = 1.0 + 0.02 * (TDS_TEMPERATURE - 25.0);                                                                                                                 // temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
-    float compensationVolatge = averageVoltage / compensationCoefficient;                                                                                                                  // temperature compensation
-    float tdsValue = (133.42 * compensationVolatge * compensationVolatge * compensationVolatge - 255.86 * compensationVolatge * compensationVolatge + 857.39 * compensationVolatge) * 0.5; // convert voltage value to tds value
+    float adcCompensation = 1 + (1 / 3.9);                                 // 1/3.9 (11dB) attenuation.
+    float vPerDiv = (TDS_VREF / 4096) * adcCompensation;                   // Calculate the volts per division using the VREF taking account of the chosen attenuation value.
+    float averageVoltage = analogReading * vPerDiv;                        // Convert the ADC reading into volts
+    float compensationCoefficient = 1.0 + 0.02 * (TDS_TEMPERATURE - 25.0); // temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
+    float compensationVolatge = averageVoltage / compensationCoefficient;  // temperature compensation
+    float tdsValue = ((133.42 * compensationVolatge * compensationVolatge * compensationVolatge) -
+                      (255.86 * compensationVolatge * compensationVolatge) +
+                      (857.39 * compensationVolatge)) *
+                     0.5; // convert voltage value to tds value
 
-    // ESP_LOGI(TAG, "Volts per division = %f", vPerDiv);
-    // ESP_LOGI(TAG, "Average Voltage = %f", averageVoltage);
-    // ESP_LOGI(TAG, "Temperature (currently fixed, we should measure this) = %f", TDS_TEMPERATURE);
-    // ESP_LOGI(TAG, "Compensation Coefficient = %f", compensationCoefficient);
-    // ESP_LOGI(TAG, "Compensation Voltge = %f", compensationVolatge);
-    // ESP_LOGI(TAG, "tdsValue = %f ppm", tdsValue);
+    ESP_LOGI(TAG, "averageVoltage = %f", averageVoltage);
     return tdsValue;
 }
 
@@ -93,6 +91,7 @@ static void tds_task(void *arg)
 
     /* Waiting for tank level measurement */
     xEventGroupWaitBits(context->event_group, CONTEXT_EVENT_TANK, pdFALSE, pdTRUE, portMAX_DELAY);
+    vTaskDelay(pdMS_TO_TICKS(10000));
 
     while (true) {
         float sensorReading = tds_read();
@@ -108,13 +107,13 @@ static void tds_task(void *arg)
                     gpio_set_level(TDS_A_PUMP_GPIO, 1);
                     gpio_set_level(TDS_B_PUMP_GPIO, 1);
                     ESP_ERROR_CHECK(esp_timer_start_once(tds_pump_duration_timer, 1000000 * 5));
-                    ESP_ERROR_CHECK(esp_timer_start_once(tds_pump_delay_timer, 1000000 * 15));
+                    ESP_ERROR_CHECK(esp_timer_start_once(tds_pump_delay_timer, 1000000 * 30));
                     mqtt_publish_state("PUMP_TDS_A_B");
                     is_pump_ready = false;
                 }
             }
         } else {
-            ESP_LOGI(TAG, "Waiting for tank level to be set");
+            ESP_LOGW(TAG, "Waiting for tank level to be set");
         }
         vTaskDelay(pdMS_TO_TICKS(3000));
     }

@@ -42,6 +42,7 @@ typedef struct {
     } config;
 
     struct {
+        TaskHandle_t task_handle;
         int64_t start_time;
         int elapsed_days;
     } cycle;
@@ -74,6 +75,8 @@ void context_lock(context_t *context);
 void context_unlock(context_t *context);
 
 esp_err_t context_set_tds(context_t *context, float value);
+
+esp_err_t context_set_target_tds(context_t *context, float min, float max);
 
 esp_err_t context_set_ph(context_t *context, float value);
 
