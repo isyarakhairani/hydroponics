@@ -5,6 +5,8 @@
 
 #include "context.h"
 
+void tank_drain_task(void *arg);
+
 esp_err_t tank_init(context_t *context);
 
 #endif // HYDROPONICS_TANK_H

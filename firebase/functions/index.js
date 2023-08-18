@@ -40,6 +40,8 @@ exports.pubsubEventData = functions.region('asia-southeast2').pubsub.topic('even
   const storedRef = db.collection('stored');
 
   const data = {
+    initialized: msg.json.initialized,
+    elapsedDays: msg.json.elapsedDays,
     tdsValue: msg.json.tdsValue,
     phValue: msg.json.phValue,
     temperature: msg.json.temperature,

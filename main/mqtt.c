@@ -18,6 +18,7 @@
 #include "error.h"
 #include "mqtt.h"
 #include "storage.h"
+#include "tank.h"
 
 #define DEVICE_PATH "projects/%s/locations/%s/registries/%s/devices/%s"
 #define SUBSCRIBE_TOPIC_WILDCARD_COMMAND "/devices/%s/commands/#"
@@ -27,16 +28,19 @@
 #define PUBLISH_TOPIC_STATE "/devices/%s/state"
 #define TASK_REPEAT_FOREVER 1
 
-#define EVENT_DATA "{"                       \
-                   "\"tdsValue\": %.02f,"    \
-                   "\"phValue\": %.02f,"     \
-                   "\"temperature\": %.01f," \
-                   "\"humidity\": %.01f,"    \
-                   "\"tankLevel\": %.02f"    \
+#define EVENT_DATA "{"                      \
+                   "\"initialized\":%s,"    \
+                   "\"elapsedDays\":%d,"    \
+                   "\"tdsValue\":%.02f,"    \
+                   "\"phValue\":%.02f,"     \
+                   "\"temperature\":%.01f," \
+                   "\"humidity\":%.01f,"    \
+                   "\"tankLevel\":%.02f"    \
                    "}"
 
 #define COMMAND_START_CYCLE 0
 #define COMMAND_END_CYCLE 1
+#define COMMAND_SET_CONSTANT 2
 
 static const char *TAG = "mqtt";
 
@@ -95,9 +99,18 @@ static esp_err_t mqtt_handle_command(const uint8_t *payload)
         ESP_ERROR_CHECK(storage_set_i64("cycle_start_tm", start_time));
         break;
     case COMMAND_END_CYCLE:
-        context->sensors.tank.target_min = 0;
-        context->sensors.tank.target_max = 0;
         vTaskDelete(context->cycle.task_handle);
+        vTaskDelete(context->sensors.tds.task_handle);
+        vTaskDelete(context->sensors.ph.task_handle);
+        vTaskDelete(context->sensors.tank.task_handle);
+        context->cycle.initialized = false;
+        context->cycle.elapsed_days = 0;
+        ESP_ERROR_CHECK(storage_set_i64("cycle_start_tm", 0));
+        xTaskCreate(tank_drain_task, "tank_drain", 4096, context, 10, NULL);
+        break;
+    case COMMAND_SET_CONSTANT:
+        context->sensors.tds.constant = cJSON_GetObjectItem(cmd, "tds")->valueint;
+        context->sensors.ph.constant = cJSON_GetObjectItem(cmd, "ph")->valueint;
         break;
     default:
         ESP_LOGE(TAG, "Invalid command type: %d", type);
@@ -155,12 +168,14 @@ static void mqtt_publish_telemetry_event(iotc_context_handle_t context_handle, i
 
     char *msg = NULL;
     asprintf(&msg, EVENT_DATA,
+             context->cycle.initialized ? "true" : "false",
+             context->cycle.elapsed_days,
              context->sensors.tds.value,
              context->sensors.ph.value,
              context->sensors.temp,
              context->sensors.humidity,
              context->sensors.tank.value);
-    ESP_LOGI(TAG, "Publishing msg \"%s\" to topic \"%s\"", msg, publish_topic_event);
+    // ESP_LOGI(TAG, "Publishing msg \"%s\" to topic \"%s\"", msg, publish_topic_event);
     iotc_publish(context_handle, publish_topic_event, msg, mqtt_qos, NULL, NULL);
 
     free(msg);
@@ -197,7 +212,7 @@ static void mqtt_connection_state_changed(iotc_context_handle_t in_context_handl
         ESP_LOGI(TAG, "Subscribed to topic, error: %d: '%s'", err, subscribe_topic_config);
 
         /* Create a timed task to publish every 'x' seconds. */
-        iotc_time_t refresh_time = 5;
+        iotc_time_t refresh_time = 2;
         delayed_publish_task = iotc_schedule_timed_task(in_context_handle, mqtt_publish_telemetry_event,
                                                         refresh_time, TASK_REPEAT_FOREVER, NULL);
         /* Force publish the first telemetry or else it will only send the telemetry in TASK_REPEAT_SEC. */

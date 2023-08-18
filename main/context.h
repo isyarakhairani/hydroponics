@@ -42,9 +42,10 @@ typedef struct {
     } config;
 
     struct {
-        TaskHandle_t task_handle;
+        bool initialized;
         int64_t start_time;
         int elapsed_days;
+        TaskHandle_t task_handle;
     } cycle;
 
     struct {
@@ -54,16 +55,21 @@ typedef struct {
             volatile float value;
             volatile float target_min;
             volatile float target_max;
+            volatile int constant;
+            TaskHandle_t task_handle;
         } tds;
         struct {
             volatile float value;
             volatile float target_min;
             volatile float target_max;
+            volatile int constant;
+            TaskHandle_t task_handle;
         } ph;
         struct {
             volatile float value;
             volatile float target_min;
             volatile float target_max;
+            TaskHandle_t task_handle;
         } tank;
     } sensors;
 } context_t;

@@ -46,6 +46,7 @@ context_t *context_create(void)
     context->spinlock = spinlock;
     context->event_group = xEventGroupCreate();
 
+    context->cycle.initialized = false;
     context->cycle.task_handle = NULL;
 
     context->sensors.temp = 0;
@@ -54,14 +55,19 @@ context_t *context_create(void)
     context->sensors.tds.value = 0;
     context->sensors.tds.target_min = 0;
     context->sensors.tds.target_min = 0;
+    context->sensors.tds.constant = 0;
+    context->sensors.tds.task_handle = NULL;
 
     context->sensors.ph.value = 0;
     context->sensors.ph.target_min = CONTEXT_PH_MIN_VALUE;
     context->sensors.ph.target_max = CONTEXT_PH_MAX_VALUE;
+    context->sensors.ph.constant = 0;
+    context->sensors.ph.task_handle = NULL;
 
     context->sensors.tank.value = 0;
     context->sensors.tank.target_min = CONTEXT_TANK_MIN_VALUE;
     context->sensors.tank.target_max = CONTEXT_TANK_MAX_VALUE;
+    context->sensors.tank.task_handle = NULL;
 
     return context;
 }
@@ -156,5 +162,6 @@ esp_err_t context_set_cycle(context_t *context, int64_t start_time)
 {
     ARG_CHECK(context != NULL, ERR_PARAM_NULL);
     context_set_single(context, context->cycle.start_time, start_time, CONTEXT_EVENT_CYCLE);
+    context_set_single(context, context->cycle.initialized, true, CONTEXT_EVENT_CYCLE);
     return ESP_OK;
 }
